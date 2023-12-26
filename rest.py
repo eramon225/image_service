@@ -4,7 +4,7 @@ import json
 import psycopg2
 
 from image_types import ImageInput, Image
-from image_classifier import classifyImage
+from detector import detect
 from dataclasses import asdict
 
 app = Flask(__name__)
@@ -19,12 +19,29 @@ conn = psycopg2.connect(
 # create a cursor
 cur = conn.cursor()
 
-BASE_TABLE_NAME = "Images2"
+BASE_TABLE_NAME = "Images6"
 TABLE_NAME = 'public."%s"'%BASE_TABLE_NAME
 
-COLUMNS = "id, location, label, object, classify, confidence"
+COLUMNS = "id, path, label, objects, detect"
 
-OPTIONS = ["daisy", "dandelion", "roses", "sunflowers", "tulips"]
+table_sql = f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME}
+(
+    id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 ),
+    label character varying(256) NOT NULL UNIQUE,
+    path character varying(256) NOT NULL,
+    objects jsonb,
+    detect boolean NOT NULL,
+    PRIMARY KEY (id)
+);"""
+
+# execute sql while applying a rollback incase
+# errors occur during the transaction.
+try:
+    cur.execute(sql)
+    conn.commit()
+except Exception as ex:
+    print(ex)
+    conn.rollback()
 
 def parse_result(query_results):
     try:
@@ -34,9 +51,8 @@ def parse_result(query_results):
                 id=res[0],
                 location=res[1],
                 label=res[2],
-                obj=res[3],
-                classify=res[4],
-                confidence=res[5]
+                objects=res[3],
+                detect=res[4],
             )
             results.append(asdict(image))
         return results
@@ -51,10 +67,13 @@ def get_all_images():
 
 def get_images_by_object(objects_str):
     objects_array = objects_str.split(',')
-    query_str = f"SELECT {COLUMNS} FROM {TABLE_NAME} WHERE "
+    query_str = f"""SELECT i.id, i.objects, i.label, i.path, i.detect
+                    FROM {TABLE_NAME} i
+                    CROSS JOIN LATERAL jsonb_array_elements(i.objects) o(obj)
+                    WHERE """
     for idx in range(len(objects_array)):
         obj = objects_array[idx]
-        query_str += 'object = \'%s\' '%obj
+        query_str += "o.obj ->> 'tag' = '{\"en\": \"%s\"}' "%str(obj)
         if idx != len( objects_array ) - 1:
             query_str += 'OR '
     query_str += ';'
@@ -65,20 +84,28 @@ def get_images_by_object(objects_str):
 def get_images_by_id(id):
     query_str = f"SELECT {COLUMNS} FROM {TABLE_NAME} WHERE id = {id};"
     cur.execute(query_str)
-    query_results = cur.fetchone()
-    result = {"id": query_results[0], "label": query_results[1], "object": query_results[2]}
-    return json.loads(json.dumps(result))
+    res = cur.fetchone()
+    image = Image(
+                id=res[0],
+                location=res[1],
+                label=res[2],
+                objects=res[3],
+                detect=res[4],
+            )
+    # Returning simply "asdict(image)" would work as well
+    # but to be completely sure we're returning a json,
+    # we'll wrap it with a json dumps and loads.
+    return json.loads(json.dumps(asdict(image)))
 
 def post_image(input_dict):
     try:
         image_input = ImageInput(**input_dict)
-        obj = None
+        classifier_result = None
         confidence = None
 
-        if image_input.classify == True:
-            res = classifyImage(image_input.location, OPTIONS)
-            obj = res["obj"]
-            confidence = res["confidence"]
+        if image_input.detect == True:
+            res = detect(image_input.location)
+            classifier_result = res["result"]["tags"]
 
         # If our label is None, we'll assign something
         if image_input.label == None:
@@ -88,34 +115,39 @@ def post_image(input_dict):
             # increment to match what the entry will be.
             id = cur.fetchone()[0] + 1
 
-            if obj is not None:
-                image_input.label = f"{obj}_{id}"
+            # If we screened this image, use the best 
+            # result as the label if we were not provided
+            # a label to use for the database.
+            if classifier_result is not None and len(classifier_result) > 0:
+                best_label = classifier_result[0]['tag']['en']
+                image_input.label = f"{best_label}_{id}"
             else:
-                image_input.label = f"unclassified_{id}"
-        # If an object object was not classified, just
-        # use a null string.
-        obj_input = f"'{obj}'" if obj is not None else "NULL"
-        confidence = str(confidence) if confidence is not None else "NULL"
-        query_str = f"""INSERT INTO {TABLE_NAME}(location, label, object, classify, confidence) 
-                        VALUES ('{image_input.location}', '{image_input.label}', {obj_input},
-                                 {str(image_input.classify)}, {str(confidence)})
+                image_input.label = f"undetected_{id}"
+
+        query_str = f"""INSERT INTO {TABLE_NAME}(path, label, objects, detect) 
+                        VALUES ('{image_input.location}', '{image_input.label}', '{json.dumps(classifier_result)}'::jsonb,
+                                 {str(image_input.detect)})
                         RETURNING {COLUMNS};"""
-        cur.execute(query_str)
-        db_return = cur.fetchone()
 
-        # Create our Image object from the result of the database
-        # to ensure we're on the same page of what was just inserted.
-        image = Image(
-            id=db_return[0],
-            location=db_return[1],
-            label=db_return[2],
-            obj=db_return[3],
-            classify=db_return[4],
-            confidence=db_return[5]
-        )
+        try:
+            cur.execute(query_str)
+            db_return = cur.fetchone()
 
-        conn.commit()
-        return json.dumps(asdict(image), indent=4)
+            # Create our Image object from the result of the database
+            # to ensure we're on the same page of what was just inserted.
+            image = Image(
+                id=db_return[0],
+                location=db_return[1],
+                label=db_return[2],
+                objects=db_return[3],
+                detect=db_return[4],
+            )
+
+            conn.commit()
+            return json.dumps(asdict(image), indent=4)
+        except Exception as ex:
+            conn.rollback()
+            raise Exception(f"{ex}")
     except Exception as ex:
         raise Exception(f"POST Image exception {ex}")
 
@@ -123,7 +155,11 @@ def post_image(input_dict):
 def get_images():
     try:
         if request.method == "POST":
-            return post_image(json.loads(request.data))
+            # Handle multipart-form here
+            if 'file' in request.files:
+                pass
+            else:
+                return post_image(json.loads(request.data))
         elif request.method == "GET":
             objects_str = request.args.get("objects", None)
             # If the objects variable fell back to None,
