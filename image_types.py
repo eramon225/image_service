@@ -1,18 +1,26 @@
 import json
 from dataclasses import dataclass, asdict
-from typing import Optional
+from typing import Optional, List
 
 @dataclass
 class ImageInput:
     location: str
     label: Optional[str] = None
-    classify: Optional[bool] = True
+    detect: Optional[bool] = True
+
+@dataclass
+class Tag:
+    en: str
+
+@dataclass
+class ImageResult:
+    confidence: float
+    tag: Tag
 
 @dataclass
 class _Image:
     id: int
-    obj: str
-    confidence: float
+    objects: List[ImageResult]
 
 @dataclass
 class Image(ImageInput, _Image):
@@ -28,9 +36,19 @@ if __name__ == '__main__':
         "id": 1,
         "location": "testLocation",
         "label": "testLabel",
-        "obj": "tree",
-        "classify": True,
-        "confidence": 80
+        "objects": [{
+            "confidence": 100,
+            "tag": {
+                "en": "basketball"
+            }
+        },
+        {
+            "confidence": 100,
+            "tag": {
+                "en": "basketball equipment"
+            }
+        }],
+        "detect": True,
     }
 
     image_input = ImageInput(**image_input_dict)

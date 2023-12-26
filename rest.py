@@ -2,6 +2,7 @@
 from flask import Flask, request
 import json
 import psycopg2
+import traceback
 
 from image_types import ImageInput, Image
 from detector import detect
@@ -102,10 +103,17 @@ def post_image(input_dict):
         image_input = ImageInput(**input_dict)
         classifier_result = None
         confidence = None
-
         if image_input.detect == True:
-            res = detect(image_input.location)
-            classifier_result = res["result"]["tags"]
+            try:
+                res = detect(image_input.location)
+            except Exception as ex:
+                raise Exception(f"detector {ex}")
+            # only get the results if the query is a success
+            if res['status']['type'] == 'success':
+                classifier_result = res["result"]["tags"]
+            elif res['status']['type'] == 'error':
+                error_messsage = res['status']['text']
+                raise Exception(f" detector {error_messsage}")
 
         # If our label is None, we'll assign something
         if image_input.label == None:
@@ -144,11 +152,12 @@ def post_image(input_dict):
             )
 
             conn.commit()
-            return json.dumps(asdict(image), indent=4)
+            return json.loads(json.dumps(asdict(image)))
         except Exception as ex:
             conn.rollback()
             raise Exception(f"{ex}")
     except Exception as ex:
+        print(traceback.print_exc())
         raise Exception(f"POST Image exception {ex}")
 
 @app.route("/images", methods=["GET", "POST"])
