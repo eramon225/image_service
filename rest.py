@@ -1,14 +1,20 @@
 
 from flask import Flask, request
+from flask_cors import CORS
 import json
 import psycopg2
 import traceback
+import validators
+import requests
+import base64
 
 from image_types import ImageInput, Image
 from detector import detect
 from dataclasses import asdict
 
 app = Flask(__name__)
+## Allow POST requests from GUI
+CORS(app)
 
 conn = psycopg2.connect(
             host="localhost",
@@ -20,10 +26,10 @@ conn = psycopg2.connect(
 # create a cursor
 cur = conn.cursor()
 
-BASE_TABLE_NAME = "Images6"
+BASE_TABLE_NAME = "Images7"
 TABLE_NAME = 'public."%s"'%BASE_TABLE_NAME
 
-COLUMNS = "id, path, label, objects, detect"
+COLUMNS = "id, path, label, objects, detect, data"
 
 table_sql = f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME}
 (
@@ -32,29 +38,34 @@ table_sql = f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME}
     path character varying(256) NOT NULL,
     objects jsonb,
     detect boolean NOT NULL,
+    data bytea NOT NULL,
     PRIMARY KEY (id)
 );"""
 
 # execute sql while applying a rollback incase
 # errors occur during the transaction.
 try:
-    cur.execute(sql)
+    cur.execute(table_sql)
     conn.commit()
 except Exception as ex:
     print(ex)
     conn.rollback()
 
+def to_image(res):
+    return Image(
+        id=res[0],
+        location=res[1],
+        label=res[2],
+        objects=res[3],
+        detect=res[4],
+        data=base64.b64encode(res[5]).decode('ascii')
+    )
+
 def parse_result(query_results):
     try:
         results = []
         for res in query_results:
-            image = Image(
-                id=res[0],
-                location=res[1],
-                label=res[2],
-                objects=res[3],
-                detect=res[4],
-            )
+            image = to_image(res)
             results.append(asdict(image))
         return results
     except Exception as ex:
@@ -68,7 +79,7 @@ def get_all_images():
 
 def get_images_by_object(objects_str):
     objects_array = objects_str.split(',')
-    query_str = f"""SELECT i.id, i.objects, i.label, i.path, i.detect
+    query_str = f"""SELECT i.id, i.objects, i.label, i.path, i.detect, i.data
                     FROM {TABLE_NAME} i
                     CROSS JOIN LATERAL jsonb_array_elements(i.objects) o(obj)
                     WHERE """
@@ -86,23 +97,31 @@ def get_images_by_id(id):
     query_str = f"SELECT {COLUMNS} FROM {TABLE_NAME} WHERE id = {id};"
     cur.execute(query_str)
     res = cur.fetchone()
-    image = Image(
-                id=res[0],
-                location=res[1],
-                label=res[2],
-                objects=res[3],
-                detect=res[4],
-            )
+    image = to_image(res)
     # Returning simply "asdict(image)" would work as well
     # but to be completely sure we're returning a json,
     # we'll wrap it with a json dumps and loads.
     return json.loads(json.dumps(asdict(image)))
 
+def get_image_bytes(image_path):
+    if validators.url(image_path):
+        # Download the bytes from the url
+        image_bytes = requests.get(image_path, stream=True)
+        return image_bytes.content
+    else:
+        # Read the bytes from the image path locally
+        image_file = open(image_path, 'rb')
+        image_bytes = image_file.read()
+        return image_bytes
+
 def post_image(input_dict):
     try:
         image_input = ImageInput(**input_dict)
         classifier_result = None
-        confidence = None
+
+        # Get the image bytes to store into the database
+        image_bytes = get_image_bytes(image_input.location)    
+
         if image_input.detect == True:
             try:
                 res = detect(image_input.location)
@@ -132,24 +151,21 @@ def post_image(input_dict):
             else:
                 image_input.label = f"undetected_{id}"
 
-        query_str = f"""INSERT INTO {TABLE_NAME}(path, label, objects, detect) 
+        # The '%s' below is for the image data
+        query_str = f"""INSERT INTO {TABLE_NAME}(path, label, objects, detect, data) 
                         VALUES ('{image_input.location}', '{image_input.label}', '{json.dumps(classifier_result)}'::jsonb,
-                                 {str(image_input.detect)})
+                                 {str(image_input.detect)}, %s)
                         RETURNING {COLUMNS};"""
+        
+        print(query_str)
 
         try:
-            cur.execute(query_str)
+            cur.execute(query_str, (image_bytes,))
             db_return = cur.fetchone()
 
             # Create our Image object from the result of the database
             # to ensure we're on the same page of what was just inserted.
-            image = Image(
-                id=db_return[0],
-                location=db_return[1],
-                label=db_return[2],
-                objects=db_return[3],
-                detect=db_return[4],
-            )
+            image = to_image(db_return)
 
             conn.commit()
             return json.loads(json.dumps(asdict(image)))

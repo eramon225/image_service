@@ -1,12 +1,12 @@
 import requests
-import json
 
 try:
     url = 'http://localhost:5000/images'
 
     payload = {
-        "location": "https://www.poochandmutt.co.uk/cdn/shop/articles/download_11.jpg?v=1627313486",
-        "detect": True
+        "label": "leaf",
+        "location": "C:/Users/Eric/Downloads/leaf.png",
+        "detect": False
     }
 
     response = requests.post(url, json=payload)

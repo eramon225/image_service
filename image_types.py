@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass, asdict
 from typing import Optional, List
+import base64
 
 @dataclass
 class ImageInput:
@@ -21,6 +22,7 @@ class ImageResult:
 class _Image:
     id: int
     objects: List[ImageResult]
+    data: str
 
 @dataclass
 class Image(ImageInput, _Image):
@@ -32,6 +34,8 @@ if __name__ == '__main__':
         "location": "testLocation",
         "label": "testLabel"
     }
+    f = open('C:/Users/Eric/Downloads/leaf.png', 'rb')
+    image_bytes = f.read()
     image_dict = {
         "id": 1,
         "location": "testLocation",
@@ -49,6 +53,7 @@ if __name__ == '__main__':
             }
         }],
         "detect": True,
+        "data": base64.b64encode(image_bytes).decode('ascii')
     }
 
     image_input = ImageInput(**image_input_dict)

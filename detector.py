@@ -23,4 +23,4 @@ def detect(image_path):
         return response.json()
 
 if __name__ == "__main__":
-    print(json.dumps(classify("C:/Users/Eric/Downloads/wemby.jpg"), indent=4))
+    print(json.dumps(detect("C:/Users/Eric/Downloads/wemby.jpg"), indent=4))
