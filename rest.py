@@ -81,11 +81,15 @@ def get_images_by_object(objects_str):
     objects_array = objects_str.split(',')
     query_str = f"""SELECT i.id, i.objects, i.label, i.path, i.detect, i.data
                     FROM {TABLE_NAME} i
-                    CROSS JOIN LATERAL jsonb_array_elements(i.objects) o(obj)
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                        case jsonb_typeof(i.objects) 
+                            when 'array' then i.objects 
+                            else '[]' end
+                        ) as obj
                     WHERE """
     for idx in range(len(objects_array)):
         obj = objects_array[idx]
-        query_str += "o.obj ->> 'tag' = '{\"en\": \"%s\"}' "%str(obj)
+        query_str += "obj ->> 'tag' = '{\"en\": \"%s\"}' "%str(obj)
         if idx != len( objects_array ) - 1:
             query_str += 'OR '
     query_str += ';'
