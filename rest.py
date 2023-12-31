@@ -30,6 +30,7 @@ BASE_TABLE_NAME = "Images7"
 TABLE_NAME = 'public."%s"'%BASE_TABLE_NAME
 
 COLUMNS = "id, path, label, objects, detect, data"
+ORDER = "ORDER BY id ASC"
 
 table_sql = f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME}
 (
@@ -72,7 +73,7 @@ def parse_result(query_results):
         raise Exception(f"Parsing exception {ex}")
 
 def get_all_images():
-    query_str = f"SELECT {COLUMNS} FROM {TABLE_NAME}"
+    query_str = f"SELECT {COLUMNS} FROM {TABLE_NAME} {ORDER}"
     cur.execute(query_str)
     query_results = cur.fetchall()
     return json.loads(json.dumps(parse_result(query_results)))
@@ -97,7 +98,7 @@ def get_images_by_object(objects_str):
         query_str += "obj ->> 'tag' = '{\"en\": \"%s\"}' "%str(obj)
         if idx != len( objects_array ) - 1:
             query_str += 'OR '
-    query_str += ';'
+    query_str += f' {ORDER};'
     cur.execute(query_str)
     query_results = cur.fetchall()
     return json.loads(json.dumps(parse_result(query_results)))
