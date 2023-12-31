@@ -166,8 +166,6 @@ def post_image(input_dict):
                                  {str(image_input.detect)}, %s)
                         RETURNING {COLUMNS};"""
         
-        print(query_str)
-
         try:
             cur.execute(query_str, (image_bytes,))
             db_return = cur.fetchone()
@@ -213,7 +211,6 @@ def get_image(id):
         return get_images_by_id(id)
     except Exception as ex:
         return error_response(f"Uncaught {ex}")
-    return error_response("Complete GET for image id but something may have gone wrong.")
 
 def error_response(msg):
     return json.loads(json.dumps({"ERROR": msg})), 400
