@@ -79,11 +79,16 @@ def get_all_images():
 
 def get_images_by_object(objects_str):
     objects_array = objects_str.split(',')
-    query_str = f"""SELECT i.id, i.objects, i.label, i.path, i.detect, i.data
-                    FROM {TABLE_NAME} i
+
+    # The query below selects by doing
+    # a cross join on the 'objects' jsonb field
+    # so we can evaluate each entry in the jsonb
+    # array to see what objects match.
+    query_str = f"""SELECT {COLUMNS}
+                    FROM {TABLE_NAME}
                     CROSS JOIN LATERAL jsonb_array_elements(
-                        case jsonb_typeof(i.objects) 
-                            when 'array' then i.objects 
+                        case jsonb_typeof(objects) 
+                            when 'array' then objects 
                             else '[]' end
                         ) as obj
                     WHERE """
