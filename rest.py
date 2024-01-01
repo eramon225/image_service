@@ -26,7 +26,9 @@ conn = psycopg2.connect(
 # create a cursor
 cur = conn.cursor()
 
-BASE_TABLE_NAME = "Images7"
+ID_INCREMENT = 1
+
+BASE_TABLE_NAME = "Images8"
 TABLE_NAME = 'public."%s"'%BASE_TABLE_NAME
 
 COLUMNS = "id, path, label, objects, detect, data"
@@ -34,7 +36,7 @@ ORDER = "ORDER BY id ASC"
 
 table_sql = f"""CREATE TABLE IF NOT EXISTS {TABLE_NAME}
 (
-    id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT 1 ),
+    id integer NOT NULL GENERATED ALWAYS AS IDENTITY ( INCREMENT {ID_INCREMENT} ),
     label character varying(256) NOT NULL UNIQUE,
     path character varying(256) NOT NULL,
     objects jsonb,
@@ -146,11 +148,20 @@ def post_image(input_dict):
 
         # If our label is None, we'll assign something
         if image_input.label == None:
-            # Lookup the id we'll use from the database
-            query_str = f"SELECT last_value FROM \"{BASE_TABLE_NAME}_id_seq\";"
+            # The query below checks what the current id value
+            # for the sequence is, and then, add the increment
+            # value when the sequence "is_called".
+            # So for the first row, no sequence is called, resulting
+            # in the "last_value" == 1. On the second row, "is_called" becomes true
+            # since the sequence next_value under the hood was called,
+            # but "last_value" still == 1, however we can 
+            # work around it by checking the "is_called",
+            # and increment from there.
+            query_str = f"""SELECT
+                            last_value + CASE WHEN is_called THEN {ID_INCREMENT} ELSE 0 END
+                            FROM \"{BASE_TABLE_NAME}_id_seq\";"""
             cur.execute(query_str)
-            # increment to match what the entry will be.
-            id = cur.fetchone()[0] + 1
+            id = cur.fetchone()[0]
 
             # If we screened this image, use the best 
             # result as the label if we were not provided
