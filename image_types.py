@@ -5,7 +5,7 @@ import base64
 
 @dataclass
 class ImageInput:
-    location: str
+    path: str
     label: Optional[str] = None
     detect: Optional[bool] = True
 
@@ -31,14 +31,14 @@ class Image(ImageInput, _Image):
 if __name__ == '__main__':
     # Test for base image type
     image_input_dict = {
-        "location": "testLocation",
+        "path": "testpath",
         "label": "testLabel"
     }
     f = open('C:/Users/Eric/Downloads/leaf.png', 'rb')
     image_bytes = f.read()
     image_dict = {
         "id": 1,
-        "location": "testLocation",
+        "path": "testpath",
         "label": "testLabel",
         "objects": [{
             "confidence": 100,

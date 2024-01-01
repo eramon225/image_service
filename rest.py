@@ -57,7 +57,7 @@ except Exception as ex:
 def to_image(res):
     return Image(
         id=res[0],
-        location=res[1],
+        path=res[1],
         label=res[2],
         objects=res[3],
         detect=res[4],
@@ -128,15 +128,24 @@ def get_image_bytes(image_path):
 
 def post_image(input_dict):
     try:
-        image_input = ImageInput(**input_dict)
         classifier_result = None
+        if "file" in input_dict:
+            image_file = input_dict["file"]
+            image_bytes = image_file.read()
+            image_input = ImageInput(
+                path=image_file.filename,
+                label=None,
+                detect=True
+            )
+        else:
+            image_input = ImageInput(**input_dict)
 
-        # Get the image bytes to store into the database
-        image_bytes = get_image_bytes(image_input.location)    
+            # Get the image bytes to store into the database
+            image_bytes = get_image_bytes(image_input.path)    
 
         if image_input.detect == True:
             try:
-                res = detect(image_input.location)
+                res = detect(image_bytes)
             except Exception as ex:
                 raise Exception(f"detector {ex}")
             # only get the results if the query is a success
@@ -174,10 +183,9 @@ def post_image(input_dict):
 
         # The '%s' below is for the image data
         query_str = f"""INSERT INTO {TABLE_NAME}(path, label, objects, detect, data) 
-                        VALUES ('{image_input.location}', '{image_input.label}', '{json.dumps(classifier_result)}'::jsonb,
+                        VALUES ('{image_input.path}', '{image_input.label}', '{json.dumps(classifier_result)}'::jsonb,
                                  {str(image_input.detect)}, %s)
                         RETURNING {COLUMNS};"""
-        
         try:
             cur.execute(query_str, (image_bytes,))
             db_return = cur.fetchone()
@@ -201,7 +209,7 @@ def get_images():
         if request.method == "POST":
             # Handle multipart-form here
             if 'file' in request.files:
-                pass
+                return post_image(request.files)
             else:
                 return post_image(json.loads(request.data))
         elif request.method == "GET":
