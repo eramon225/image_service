@@ -12,17 +12,25 @@ from image_types import ImageInput, Image
 from detector import detect
 from dataclasses import asdict
 
+import yaml
+
+with open('config.yaml', 'r') as file:
+    config = yaml.safe_load(file)
+
 app = Flask(__name__)
 ## Allow POST requests from GUI
 CORS(app)
 
 conn = psycopg2.connect(
-            host="localhost",
-            database="NewDB",
-            user="postgres",
-            password="1234"
+            host=config['db']['host'],
+            database=config['db']['database'],
+            user=config['db']['user'],
+            password=config['db']['password']
         )
-		
+
+api_key = config['api']['api_key']
+api_secret = config['api']['api_secret']
+
 # create a cursor
 cur = conn.cursor()
 
@@ -145,7 +153,7 @@ def post_image(input_dict):
 
         if image_input.detect == True:
             try:
-                res = detect(image_bytes)
+                res = detect(image_bytes, api_key, api_secret)
             except Exception as ex:
                 raise Exception(f"detector {ex}")
             # only get the results if the query is a success

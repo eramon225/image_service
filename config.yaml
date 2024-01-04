@@ -1,0 +1,9 @@
+
+db:
+  host: 'localhost'
+  database: 'your db name here'
+  user: 'your username here'
+  password: 'your password here'
+api:
+  api_key: 'your key here'
+  api_secret: 'your secret here'
