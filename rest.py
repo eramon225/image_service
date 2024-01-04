@@ -14,22 +14,27 @@ from dataclasses import asdict
 
 import yaml
 
-with open('config.yaml', 'r') as file:
-    config = yaml.safe_load(file)
+try:
+    with open('config.yaml', 'r') as file:
+        config = yaml.safe_load(file)
 
-app = Flask(__name__)
-## Allow POST requests from GUI
-CORS(app)
+    app = Flask(__name__)
+    ## Allow POST requests from GUI
+    CORS(app)
 
-conn = psycopg2.connect(
-            host=config['db']['host'],
-            database=config['db']['database'],
-            user=config['db']['user'],
-            password=config['db']['password']
-        )
+    conn = psycopg2.connect(
+                host=config['db']['host'],
+                database=config['db']['database'],
+                user=config['db']['user'],
+                password=config['db']['password']
+            )
 
-api_key = config['api']['api_key']
-api_secret = config['api']['api_secret']
+    api_key = config['api']['api_key']
+    api_secret = config['api']['api_secret']
+
+except Exception as ex:
+    print(f"Failed to run rest backend: {ex}")
+    exit()
 
 # create a cursor
 cur = conn.cursor()
