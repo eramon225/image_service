@@ -1,6 +1,6 @@
 # Python REST Service
 
-This repository contains a Python-based RESTful service that provides [describe what the service does or its purpose].
+This repository contains a Python-based RESTful service that provides Imagga recognition for images.
 
 ## Features
 
@@ -22,3 +22,7 @@ This repository contains a Python-based RESTful service that provides [describe 
 - base64
 - dataclasses
 - pyyaml
+
+### Usage
+
+`python rest.py`
