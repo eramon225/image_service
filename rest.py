@@ -32,6 +32,8 @@ try:
     api_key = config['api']['api_key']
     api_secret = config['api']['api_secret']
 
+    BASE_TABLE_NAME = config['table']
+
 except Exception as ex:
     print(f"Failed to run rest backend: {ex}")
     exit()
@@ -41,7 +43,6 @@ cur = conn.cursor()
 
 ID_INCREMENT = 1
 
-BASE_TABLE_NAME = "Images8"
 TABLE_NAME = 'public."%s"'%BASE_TABLE_NAME
 
 COLUMNS = "id, path, label, objects, detect, data"

@@ -7,3 +7,4 @@ db:
 api:
   api_key: 'your key here'
   api_secret: 'your secret here'
+table: 'table name here'
